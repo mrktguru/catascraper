@@ -281,6 +281,18 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
                     else:
                         result['first_image'] = ''
 
+                    # Format URL as clickable icon with HYPERLINK formula
+                    url = result.get('url', '')
+                    if url:
+                        result['url'] = f'=HYPERLINK("{url}", "🔗 View")'
+
+                    # Format end_date as live countdown formula
+                    end_date = result.get('end_date', '')
+                    if end_date and len(end_date) == 19:  # Format: "2025-11-17 21:00:00"
+                        date_part = end_date[:10]  # "2025-11-17"
+                        time_part = end_date[11:]  # "21:00:00"
+                        result['end_date'] = f'=TEXT(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW(), "[d]d [h]h [m]m")'
+
                     results.append(result)
 
                 jobs[job_id]["processed"] = i
@@ -364,6 +376,18 @@ def save_to_csv(data_list: list, filename: str):
             # Create Google Sheets IMAGE formula for 100x100px preview
             first_image_formula = f'=IMAGE("{first_img_url}", 4, 100, 100)' if first_img_url else ''
 
+            # Get URL and format as clickable icon if not already formatted
+            url = item.get('url', '')
+            if url and not url.startswith('=HYPERLINK'):
+                url = f'=HYPERLINK("{url}", "🔗 View")'
+
+            # Format end_date as live countdown formula if not already formatted
+            end_date = item.get('end_date', '')
+            if end_date and not end_date.startswith('=') and len(end_date) == 19:
+                date_part = end_date[:10]
+                time_part = end_date[11:]
+                end_date = f'=TEXT(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW(), "[d]d [h]h [m]m")'
+
             # Prepare row data
             row = {
                 'title': item.get('title', ''),
@@ -371,10 +395,10 @@ def save_to_csv(data_list: list, filename: str):
                 'seller_name': item.get('seller_name', ''),
                 'current_price': item.get('current_price', ''),
                 'shipping_cost': item.get('shipping_cost', ''),
-                'end_date': item.get('end_date', ''),
+                'end_date': end_date,
                 'images_count': len(item.get('images', [])),
                 'first_image': first_image_formula,
-                'url': item.get('url', ''),
+                'url': url,
                 'scraped_at': item.get('scraped_at', ''),
             }
             writer.writerow(row)

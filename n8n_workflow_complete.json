@@ -117,7 +117,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Извлекаем и форматируем результаты\nconst results = $input.first().json.result.results || [];\n\nconsole.log('Processing results:', results.length);\n\n// Форматируем для Google Sheets\nreturn results.map(item => ({\n  json: {\n    title: item.title || '',\n    bottles_count: item.bottles_count || '',\n    seller_name: item.seller_name || '',\n    current_price: item.current_price || '',\n    shipping_cost: item.shipping_cost || '',\n    end_date: item.end_date || '',\n    images_count: (item.images || []).length,\n    first_image: (item.images || [])[0] || '',\n    url: item.url || '',\n    scraped_at: item.scraped_at || ''\n  }\n}));"
+        "jsCode": "// Извлекаем и форматируем результаты\nconst results = $input.first().json.result.results || [];\n\nconsole.log('Processing results:', results.length);\n\n// Форматируем для Google Sheets\nreturn results.map(item => ({\n  json: {\n    title: item.title || '',\n    bottles_count: item.bottles_count || '',\n    seller_name: item.seller_name || '',\n    current_price: item.current_price || '',\n    shipping_cost: item.shipping_cost || '',\n    end_date: item.end_date || '',\n    images_count: (item.images || []).length,\n    first_image: item.first_image || '',\n    url: item.url || '',\n    scraped_at: item.scraped_at || ''\n  }\n}));"
       },
       "name": "Format Results",
       "type": "n8n-nodes-base.code",

@@ -390,14 +390,16 @@ class CatawikiScraperPro:
         return "0"
 
     async def _extract_end_date(self, page, page_text: str) -> Optional[str]:
-        """Extract auction end date - captures full countdown format"""
+        """Extract auction end date - calculates exact closing time"""
 
         # Try to find the main countdown counter first
         try:
             counter = await page.query_selector('[data-testid="lot-bidding-counter"]')
             if counter:
                 # Extract all time components
-                time_parts = []
+                days = 0
+                hours = 0
+                minutes = 0
 
                 # Find all AnimatedNumber containers
                 containers = await counter.query_selector_all('div[class*="AnimatedNumber_container"]')
@@ -412,19 +414,26 @@ class CatawikiScraperPro:
                         number = await number_elem.inner_text()
                         label = await label_elem.inner_text()
 
-                        # Skip seconds and format as shorthand (d/h/m)
-                        if 'second' not in label.lower():
-                            label_lower = label.lower()
+                        # Parse time components
+                        label_lower = label.lower()
+                        try:
+                            value = int(number.strip())
                             if 'day' in label_lower:
-                                time_parts.append(f"{number.strip()}d")
+                                days = value
                             elif 'hour' in label_lower:
-                                time_parts.append(f"{number.strip()}h")
+                                hours = value
                             elif 'min' in label_lower:
-                                time_parts.append(f"{number.strip()}m")
+                                minutes = value
+                        except:
+                            continue
 
-                if time_parts:
-                    full_countdown = ' '.join(time_parts)
-                    return full_countdown
+                # Calculate exact end time
+                from datetime import timedelta
+                now = datetime.now()
+                end_time = now + timedelta(days=days, hours=hours, minutes=minutes)
+
+                # Return ISO format datetime string
+                return end_time.strftime('%Y-%m-%d %H:%M:%S')
         except Exception as e:
             pass
 
