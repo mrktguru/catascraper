@@ -136,12 +136,12 @@ def save_to_csv(data_list: list, filename: str):
             # Get first image URL
             first_img_url = item.get('images', [''])[0] if item.get('images') else ''
             # Create Google Sheets IMAGE formula for 100x100px preview
-            first_image_formula = f'=IMAGE("{first_img_url}", 4, 100, 100)' if first_img_url else ''
+            first_image_formula = f'=IMAGE("{first_img_url}"; 4; 100; 100)' if first_img_url else ''
 
             # Get URL and format as clickable icon
             url = item.get('url', '')
             if url:
-                url = f'=HYPERLINK("{url}", "🔗 View")'
+                url = f'=HYPERLINK("{url}"; "🔗 View")'
 
             # Format end_date as live countdown formula
             end_date = item.get('end_date', '')
