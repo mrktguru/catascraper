@@ -1,0 +1,19 @@
+[Unit]
+Description=Catawiki Scraper API Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/cataparser
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 /root/cataparser/api_server.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/var/log/catawiki-api.log
+StandardError=append:/var/log/catawiki-api-error.log
+
+[Install]
+WantedBy=multi-user.target
