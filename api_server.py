@@ -281,6 +281,11 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
                     else:
                         result['first_image'] = ''
 
+                    # Format URL as clickable icon with HYPERLINK formula
+                    url = result.get('url', '')
+                    if url:
+                        result['url'] = f'=HYPERLINK("{url}", "🔗 View")'
+
                     results.append(result)
 
                 jobs[job_id]["processed"] = i
@@ -364,6 +369,11 @@ def save_to_csv(data_list: list, filename: str):
             # Create Google Sheets IMAGE formula for 100x100px preview
             first_image_formula = f'=IMAGE("{first_img_url}", 4, 100, 100)' if first_img_url else ''
 
+            # Get URL and format as clickable icon if not already formatted
+            url = item.get('url', '')
+            if url and not url.startswith('=HYPERLINK'):
+                url = f'=HYPERLINK("{url}", "🔗 View")'
+
             # Prepare row data
             row = {
                 'title': item.get('title', ''),
@@ -374,7 +384,7 @@ def save_to_csv(data_list: list, filename: str):
                 'end_date': item.get('end_date', ''),
                 'images_count': len(item.get('images', [])),
                 'first_image': first_image_formula,
-                'url': item.get('url', ''),
+                'url': url,
                 'scraped_at': item.get('scraped_at', ''),
             }
             writer.writerow(row)

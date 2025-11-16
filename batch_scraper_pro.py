@@ -138,6 +138,11 @@ def save_to_csv(data_list: list, filename: str):
             # Create Google Sheets IMAGE formula for 100x100px preview
             first_image_formula = f'=IMAGE("{first_img_url}", 4, 100, 100)' if first_img_url else ''
 
+            # Get URL and format as clickable icon
+            url = item.get('url', '')
+            if url:
+                url = f'=HYPERLINK("{url}", "🔗 View")'
+
             # Prepare row data
             row = {
                 'title': item.get('title', ''),
@@ -148,7 +153,7 @@ def save_to_csv(data_list: list, filename: str):
                 'end_date': item.get('end_date', ''),
                 'images_count': len(item.get('images', [])),
                 'first_image': first_image_formula,
-                'url': item.get('url', ''),
+                'url': url,
                 'scraped_at': item.get('scraped_at', ''),
             }
 
