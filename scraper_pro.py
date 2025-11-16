@@ -335,7 +335,7 @@ class CatawikiScraperPro:
         return None
 
     async def _extract_shipping_cost(self, page, page_text: str) -> Optional[str]:
-        """Extract shipping cost"""
+        """Extract shipping cost as number only"""
 
         # Try selectors
         shipping_selectors = [
@@ -350,7 +350,8 @@ class CatawikiScraperPro:
                 if element:
                     text = await element.inner_text()
                     if text and ('€' in text or '$' in text or '£' in text or 'free' in text.lower()):
-                        return text.strip()
+                        # Extract only the number
+                        return self._extract_number_from_price(text)
             except:
                 continue
 
@@ -365,9 +366,28 @@ class CatawikiScraperPro:
         for pattern in shipping_patterns:
             match = re.search(pattern, page_text, re.IGNORECASE)
             if match:
-                return match.group(0).strip()
+                # Extract only the number
+                return self._extract_number_from_price(match.group(0))
 
         return None
+
+    def _extract_number_from_price(self, text: str) -> str:
+        """Extract only number from price text (e.g., '€35 from France' -> '35')"""
+        if not text:
+            return "0"
+
+        # Check for free shipping
+        if 'free' in text.lower():
+            return "0"
+
+        # Extract number using regex
+        number_match = re.search(r'[\d,]+(?:\.\d{2})?', text)
+        if number_match:
+            # Remove commas and return clean number
+            number = number_match.group(0).replace(',', '')
+            return number
+
+        return "0"
 
     async def _extract_end_date(self, page, page_text: str) -> Optional[str]:
         """Extract auction end date - captures full countdown format"""
