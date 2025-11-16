@@ -1,0 +1,274 @@
+{
+  "name": "Catawiki: Google Sheets Complete (Fixed IF)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 400],
+      "id": "1"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "options": {
+          "range": "A:A"
+        }
+      },
+      "name": "Read URLs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.1,
+      "position": [450, 400],
+      "id": "2"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Извлекаем URL из Google Sheets\nconst urls = $input.all()\n  .map(item => {\n    const json = item.json;\n    return json.url || json.A || Object.values(json)[0];\n  })\n  .filter(url => url && String(url).trim().startsWith('http'));\n\nconsole.log('Found URLs:', urls.length);\n\nreturn { json: { urls: urls } };"
+      },
+      "name": "Prepare URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "id": "3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:8000/scrape-batch",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "urls",
+              "value": "={{ $json.urls }}"
+            },
+            {
+              "name": "headless",
+              "value": "=true"
+            },
+            {
+              "name": "save_csv",
+              "value": "=true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Start Batch Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "name": "Wait 2 Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "id": "5"
+    },
+    {
+      "parameters": {
+        "url": "=http://172.17.0.1:8000/job/{{ $json.job_id }}",
+        "options": {}
+      },
+      "name": "Check Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 400],
+      "id": "6"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Проверяем статус задачи\nconst data = $input.first().json;\nconst status = data.status;\n\nconsole.log('Job status:', status);\n\nif (status === 'completed') {\n  // Успешно - возвращаем данные в первый output\n  return [[$input.first()]];\n} else {\n  // Ошибка - возвращаем во второй output\n  return [null, [$input.first()]];\n}"
+      },
+      "name": "Check If Completed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "id": "7"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Извлекаем и форматируем результаты\nconst results = $input.first().json.result.results || [];\n\nconsole.log('Processing results:', results.length);\n\n// Форматируем для Google Sheets\nreturn results.map(item => ({\n  json: {\n    title: item.title || '',\n    bottles_count: item.bottles_count || '',\n    seller_name: item.seller_name || '',\n    current_price: item.current_price || '',\n    shipping_cost: item.shipping_cost || '',\n    end_date: item.end_date || '',\n    images_count: (item.images || []).length,\n    first_image: (item.images || [])[0] || '',\n    url: item.url || '',\n    scraped_at: item.scraped_at || ''\n  }\n}));"
+      },
+      "name": "Format Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "id": "8"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=1",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "bottles_count": "={{ $json.bottles_count }}",
+            "seller_name": "={{ $json.seller_name }}",
+            "current_price": "={{ $json.current_price }}",
+            "shipping_cost": "={{ $json.shipping_cost }}",
+            "end_date": "={{ $json.end_date }}",
+            "images_count": "={{ $json.images_count }}",
+            "first_image": "={{ $json.first_image }}",
+            "url": "={{ $json.url }}",
+            "scraped_at": "={{ $json.scraped_at }}"
+          }
+        },
+        "options": {}
+      },
+      "name": "Write to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.1,
+      "position": [1850, 300],
+      "id": "9"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\n\nreturn [{\n  json: {\n    error: true,\n    status: data.status,\n    message: `Job status: ${data.status}\\nError: ${data.error || 'Unknown'}`,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 500],
+      "id": "10"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read URLs": {
+      "main": [
+        [
+          {
+            "node": "Prepare URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare URLs": {
+      "main": [
+        [
+          {
+            "node": "Start Batch Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Batch Job": {
+      "main": [
+        [
+          {
+            "node": "Wait 2 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status": {
+      "main": [
+        [
+          {
+            "node": "Check If Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Completed": {
+      "main": [
+        [
+          {
+            "node": "Format Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Results": {
+      "main": [
+        [
+          {
+            "node": "Write to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}
