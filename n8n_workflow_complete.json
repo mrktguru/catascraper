@@ -153,7 +153,9 @@
             "scraped_at": "={{ $json.scraped_at }}"
           }
         },
-        "options": {}
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
       },
       "name": "Write to Google Sheets",
       "type": "n8n-nodes-base.googleSheets",
