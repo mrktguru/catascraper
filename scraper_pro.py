@@ -412,9 +412,15 @@ class CatawikiScraperPro:
                         number = await number_elem.inner_text()
                         label = await label_elem.inner_text()
 
-                        # Skip seconds
+                        # Skip seconds and format as shorthand (d/h/m)
                         if 'second' not in label.lower():
-                            time_parts.append(f"{number.strip()} {label.strip()}")
+                            label_lower = label.lower()
+                            if 'day' in label_lower:
+                                time_parts.append(f"{number.strip()}d")
+                            elif 'hour' in label_lower:
+                                time_parts.append(f"{number.strip()}h")
+                            elif 'min' in label_lower:
+                                time_parts.append(f"{number.strip()}m")
 
                 if time_parts:
                     full_countdown = ' '.join(time_parts)
