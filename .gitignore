@@ -32,7 +32,10 @@ error_*.png
 # Scraped data
 scraped_data.json
 output/
-*.json
+listing_*.json
+summary_*.json
+batch_*.json
+catawiki_export_*.csv
 
 # Playwright
 .playwright/
