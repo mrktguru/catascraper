@@ -274,6 +274,13 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
                 result = await scraper.scrape_listing(url)
 
                 if result and result.get('title'):
+                    # Add first_image as Google Sheets formula for 100x100px preview
+                    images = result.get('images', [])
+                    if images:
+                        result['first_image'] = f'=IMAGE("{images[0]}", 4, 100, 100)'
+                    else:
+                        result['first_image'] = ''
+
                     results.append(result)
 
                 jobs[job_id]["processed"] = i
@@ -352,6 +359,11 @@ def save_to_csv(data_list: list, filename: str):
         writer.writeheader()
 
         for item in data_list:
+            # Get first image URL
+            first_img_url = item.get('images', [''])[0] if item.get('images') else ''
+            # Create Google Sheets IMAGE formula for 100x100px preview
+            first_image_formula = f'=IMAGE("{first_img_url}", 4, 100, 100)' if first_img_url else ''
+
             # Prepare row data
             row = {
                 'title': item.get('title', ''),
@@ -361,7 +373,7 @@ def save_to_csv(data_list: list, filename: str):
                 'shipping_cost': item.get('shipping_cost', ''),
                 'end_date': item.get('end_date', ''),
                 'images_count': len(item.get('images', [])),
-                'first_image': item.get('images', [''])[0] if item.get('images') else '',
+                'first_image': first_image_formula,
                 'url': item.get('url', ''),
                 'scraped_at': item.get('scraped_at', ''),
             }
