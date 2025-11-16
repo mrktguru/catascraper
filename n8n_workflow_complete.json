@@ -154,7 +154,8 @@
           }
         },
         "options": {
-          "cellFormat": "USER_ENTERED"
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
         }
       },
       "name": "Write to Google Sheets",
