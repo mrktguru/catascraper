@@ -370,47 +370,78 @@ class CatawikiScraperPro:
         return None
 
     async def _extract_end_date(self, page, page_text: str) -> Optional[str]:
-        """Extract auction end date"""
+        """Extract auction end date - captures full countdown format"""
 
-        # Try selectors
-        date_selectors = [
-            '[data-testid*="end"]',
+        # Try to find countdown timer with complete format first
+        countdown_selectors = [
+            '[data-testid*="countdown"]',
+            '[class*="countdown"]',
+            '[class*="timer"]',
             '[data-testid*="time"]',
+            '[data-testid*="end"]',
             '.auction-end',
             'time',
         ]
 
-        for selector in date_selectors:
+        best_match = None
+        max_parts = 0  # Track how many time parts we found (days, hours, minutes)
+
+        for selector in countdown_selectors:
             try:
                 elements = await page.query_selector_all(selector)
                 for element in elements:
                     text = await element.inner_text()
-                    # Look for date patterns
-                    if any(word in text.lower() for word in ['end', 'closing', 'until', 'day', 'hour', 'min']):
+                    text_lower = text.lower()
+
+                    # Count how many time units are present
+                    parts_count = sum([
+                        'day' in text_lower or 'день' in text_lower or 'дн' in text_lower,
+                        'hour' in text_lower or 'час' in text_lower or 'hr' in text_lower,
+                        'min' in text_lower or 'мин' in text_lower
+                    ])
+
+                    # Prefer elements with more time parts (e.g., "1 day 23 hours 22 min")
+                    if parts_count > max_parts and len(text.strip()) < 200:
+                        max_parts = parts_count
+                        best_match = text.strip()
+
+                    # If we have all 3 parts, that's the best we can get
+                    if parts_count >= 3:
                         return text.strip()
+
                     # Check datetime attribute
                     datetime_attr = await element.get_attribute('datetime')
-                    if datetime_attr:
-                        return datetime_attr
+                    if datetime_attr and not best_match:
+                        best_match = datetime_attr
             except:
                 continue
 
-        # Fallback: regex patterns
+        # If we found something, return it
+        if best_match:
+            return best_match
+
+        # Fallback: improved regex patterns for complete countdown
         date_patterns = [
-            r'End[s]?[:\s]+([^\n]+)',
-            r'Closing[:\s]+([^\n]+)',
-            r'Auction ends[:\s]+([^\n]+)',
+            # Multi-part countdowns (days + hours + minutes)
+            r'(\d+\s+(?:day|days|день|дня|дней|дн)[^\d]*\d+\s+(?:hour|hours|час|часа|часов|ч)[^\d]*\d+\s+(?:min|minute|minutes|мин|минут|м))',
+            # Days + hours
+            r'(\d+\s+(?:day|days|день|дня|дней|дн)[^\d]*\d+\s+(?:hour|hours|час|часа|часов|ч))',
+            # Hours + minutes
+            r'(\d+\s+(?:hour|hours|час|часа|часов|ч)[^\d]*\d+\s+(?:min|minute|minutes|мин|минут|м))',
+            # Time left patterns
             r'Time left[:\s]+([^\n]+)',
-            r'(\d+\s+days?\s+\d+\s+hours?)',
+            r'Auction ends[:\s]+([^\n]+)',
+            r'Closing[:\s]+([^\n]+)',
+            r'End[s]?[:\s]+([^\n]+)',
         ]
 
         for pattern in date_patterns:
             match = re.search(pattern, page_text, re.IGNORECASE)
             if match:
                 end_time = match.group(1).strip()
-                # Take only first line
+                # Take only first line and clean up
                 end_time = end_time.split('\n')[0].strip()
-                if len(end_time) < 100:
+                if 5 < len(end_time) < 150:
                     return end_time
 
         return None
