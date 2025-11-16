@@ -277,14 +277,14 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
                     # Add first_image as Google Sheets formula for 100x100px preview
                     images = result.get('images', [])
                     if images:
-                        result['first_image'] = f'=IMAGE("{images[0]}", 4, 100, 100)'
+                        result['first_image'] = f'=IMAGE("{images[0]}"; 4; 100; 100)'
                     else:
                         result['first_image'] = ''
 
                     # Format URL as clickable icon with HYPERLINK formula
                     url = result.get('url', '')
                     if url:
-                        result['url'] = f'=HYPERLINK("{url}", "🔗 View")'
+                        result['url'] = f'=HYPERLINK("{url}"; "🔗 View")'
 
                     # Format end_date as live countdown formula
                     end_date = result.get('end_date', '')
@@ -374,12 +374,12 @@ def save_to_csv(data_list: list, filename: str):
             # Get first image URL
             first_img_url = item.get('images', [''])[0] if item.get('images') else ''
             # Create Google Sheets IMAGE formula for 100x100px preview
-            first_image_formula = f'=IMAGE("{first_img_url}", 4, 100, 100)' if first_img_url else ''
+            first_image_formula = f'=IMAGE("{first_img_url}"; 4; 100; 100)' if first_img_url else ''
 
             # Get URL and format as clickable icon if not already formatted
             url = item.get('url', '')
             if url and not url.startswith('=HYPERLINK'):
-                url = f'=HYPERLINK("{url}", "🔗 View")'
+                url = f'=HYPERLINK("{url}"; "🔗 View")'
 
             # Format end_date as live countdown formula if not already formatted
             end_date = item.get('end_date', '')
