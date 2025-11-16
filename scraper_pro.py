@@ -372,7 +372,37 @@ class CatawikiScraperPro:
     async def _extract_end_date(self, page, page_text: str) -> Optional[str]:
         """Extract auction end date - captures full countdown format"""
 
-        # Try to find countdown timer with complete format first
+        # Try to find the main countdown counter first
+        try:
+            counter = await page.query_selector('[data-testid="lot-bidding-counter"]')
+            if counter:
+                # Extract all time components
+                time_parts = []
+
+                # Find all AnimatedNumber containers
+                containers = await counter.query_selector_all('div[class*="AnimatedNumber_container"]')
+
+                for container in containers:
+                    # Get the number (in div with tw:text-h4 class)
+                    number_elem = await container.query_selector('div.tw\\:text-h4')
+                    # Get the label (day/hours/minutes/seconds)
+                    label_elem = await container.query_selector('div.tw\\:text-label-s')
+
+                    if number_elem and label_elem:
+                        number = await number_elem.inner_text()
+                        label = await label_elem.inner_text()
+
+                        # Skip seconds
+                        if 'second' not in label.lower():
+                            time_parts.append(f"{number.strip()} {label.strip()}")
+
+                if time_parts:
+                    full_countdown = ' '.join(time_parts)
+                    return full_countdown
+        except Exception as e:
+            pass
+
+        # Fallback: try to find countdown timer with complete format
         countdown_selectors = [
             '[data-testid*="countdown"]',
             '[class*="countdown"]',
@@ -386,12 +416,9 @@ class CatawikiScraperPro:
         best_match = None
         max_parts = 0  # Track how many time parts we found (days, hours, minutes)
 
-        print(f"[DEBUG] Searching for countdown...")
-
         for selector in countdown_selectors:
             try:
                 elements = await page.query_selector_all(selector)
-                print(f"[DEBUG] Selector '{selector}' found {len(elements)} elements")
                 for element in elements:
                     text = await element.inner_text()
                     text_lower = text.lower()
@@ -400,34 +427,27 @@ class CatawikiScraperPro:
                     parts_count = sum([
                         'day' in text_lower or 'день' in text_lower or 'дн' in text_lower,
                         'hour' in text_lower or 'час' in text_lower or 'hr' in text_lower,
-                        'min' in text_lower or 'мин' in text_lower
+                        'min' in text_lower or 'мін' in text_lower
                     ])
-
-                    if parts_count > 0:
-                        print(f"[DEBUG] Found {parts_count} parts in: {text[:100]}")
 
                     # Prefer elements with more time parts (e.g., "1 day 23 hours 22 min")
                     if parts_count > max_parts and len(text.strip()) < 200:
                         max_parts = parts_count
                         best_match = text.strip()
-                        print(f"[DEBUG] New best match ({max_parts} parts): {best_match[:100]}")
 
                     # If we have all 3 parts, that's the best we can get
                     if parts_count >= 3:
-                        print(f"[DEBUG] Found complete countdown (3 parts): {text.strip()[:100]}")
                         return text.strip()
 
                     # Check datetime attribute
                     datetime_attr = await element.get_attribute('datetime')
                     if datetime_attr and not best_match:
                         best_match = datetime_attr
-            except Exception as e:
-                print(f"[DEBUG] Error with selector '{selector}': {e}")
+            except:
                 continue
 
         # If we found something, return it
         if best_match:
-            print(f"[DEBUG] Returning best match: {best_match[:100]}")
             return best_match
 
         # Fallback: improved regex patterns for complete countdown
