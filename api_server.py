@@ -15,6 +15,7 @@ import uuid
 
 # Import our scraper
 import sys
+import csv
 sys.path.append('/root/cataparser')
 from scraper_pro import CatawikiScraperPro
 
@@ -299,10 +300,9 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
 
             # Save CSV if requested
             if save_csv:
-                from scraper_pro import CatawikiScraperPro
                 csv_path = output_dir / f"batch_{job_id}_{timestamp}.csv"
-                scraper = CatawikiScraperPro()
-                scraper.save_to_csv(results, str(csv_path))
+                # Use imported save_to_csv function
+                save_to_csv(results, str(csv_path))
 
             jobs[job_id]["status"] = "completed"
             jobs[job_id]["result"] = {
@@ -325,6 +325,49 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
 
     finally:
         jobs[job_id]["completed_at"] = datetime.now().isoformat()
+
+
+def save_to_csv(data_list: list, filename: str):
+    """Save scraped data to CSV file"""
+    if not data_list:
+        print("No data to save to CSV")
+        return
+
+    # CSV columns
+    fieldnames = [
+        'title',
+        'bottles_count',
+        'seller_name',
+        'current_price',
+        'shipping_cost',
+        'end_date',
+        'images_count',
+        'first_image',
+        'url',
+        'scraped_at',
+    ]
+
+    with open(filename, 'w', newline='', encoding='utf-8-sig') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writeheader()
+
+        for item in data_list:
+            # Prepare row data
+            row = {
+                'title': item.get('title', ''),
+                'bottles_count': item.get('bottles_count', ''),
+                'seller_name': item.get('seller_name', ''),
+                'current_price': item.get('current_price', ''),
+                'shipping_cost': item.get('shipping_cost', ''),
+                'end_date': item.get('end_date', ''),
+                'images_count': len(item.get('images', [])),
+                'first_image': item.get('images', [''])[0] if item.get('images') else '',
+                'url': item.get('url', ''),
+                'scraped_at': item.get('scraped_at', ''),
+            }
+            writer.writerow(row)
+
+    print(f"💾 CSV saved to: {filename}")
 
 
 if __name__ == "__main__":
