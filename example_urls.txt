@@ -1,0 +1,7 @@
+# Catawiki URLs to scrape
+# One URL per line, lines starting with # are ignored
+
+# Example Burgundy wine
+https://www.catawiki.com/en/l/98998534-2022-beaune-1-cru-belissand-domaine-francoise-andre-burgundy-6-bottles-0-75l
+
+# Add more URLs below:
