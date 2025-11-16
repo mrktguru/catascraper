@@ -1,0 +1,436 @@
+{
+  "name": "Catawiki: Google Sheets → Scrape → Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger (Daily 9am)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 400],
+      "id": "schedule-trigger"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "URLs",
+          "mode": "name"
+        },
+        "range": "A2:A1000",
+        "options": {
+          "valueRenderMode": "UNFORMATTED_VALUE"
+        }
+      },
+      "name": "Read URLs from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [450, 400],
+      "id": "read-urls",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIALS_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "urls-array",
+              "name": "urls",
+              "value": "={{ $json.map(item => item['A']).filter(url => url && url.trim() !== '') }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Prepare URLs Array",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [650, 400],
+      "id": "prepare-urls",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/scrape-batch",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"urls\": {{ $json.urls }},\n  \"headless\": true,\n  \"save_csv\": true\n}",
+        "options": {}
+      },
+      "name": "Start Batch Scraping Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400],
+      "id": "start-batch-job"
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "minutes"
+      },
+      "name": "Wait 3 Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "id": "wait-for-completion",
+      "webhookId": "wait-webhook-id"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:8000/job/{{ $json.job_id }}",
+        "authentication": "none",
+        "options": {}
+      },
+      "name": "Check Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 400],
+      "id": "check-job-status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "status-completed",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Job Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "id": "check-if-completed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-results",
+              "name": "results",
+              "value": "={{ $json.result.results }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extract Results",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1650, 300],
+      "id": "extract-results"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "name": "Split Results",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1850, 300],
+      "id": "split-results"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "title",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "bottles",
+              "name": "bottles_count",
+              "value": "={{ $json.bottles_count }}",
+              "type": "number"
+            },
+            {
+              "id": "seller",
+              "name": "seller_name",
+              "value": "={{ $json.seller_name }}",
+              "type": "string"
+            },
+            {
+              "id": "price",
+              "name": "current_price",
+              "value": "={{ $json.current_price }}",
+              "type": "string"
+            },
+            {
+              "id": "shipping",
+              "name": "shipping_cost",
+              "value": "={{ $json.shipping_cost }}",
+              "type": "string"
+            },
+            {
+              "id": "end-date",
+              "name": "end_date",
+              "value": "={{ $json.end_date }}",
+              "type": "string"
+            },
+            {
+              "id": "images-count",
+              "name": "images_count",
+              "value": "={{ $json.images ? $json.images.length : 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "first-image",
+              "name": "first_image",
+              "value": "={{ $json.images && $json.images.length > 0 ? $json.images[0] : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "url",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "scraped-at",
+              "name": "scraped_at",
+              "value": "={{ $json.scraped_at }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Format for Google Sheets",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2050, 300],
+      "id": "format-for-sheets"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Results",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "name": "Write to Results Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2250, 300],
+      "id": "write-results",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIALS_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "=✅ **Парсинг завершен!**\n\n📊 Статистика:\n• Всего URL: {{ $json.result.total_urls }}\n• Успешно: {{ $json.result.successful }}\n• Ошибок: {{ $json.result.failed }}\n\n⏰ Время: {{ $now.toFormat('dd.MM.yyyy HH:mm') }}\n\n✨ Результаты записаны в Google Sheets!",
+        "options": {}
+      },
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [2250, 500],
+      "id": "success-notification"
+    },
+    {
+      "parameters": {
+        "content": "=❌ **Ошибка парсинга**\n\nСтатус задачи: {{ $json.status }}\n\nПопробуйте запустить позже или проверьте логи API.",
+        "options": {}
+      },
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [1650, 500],
+      "id": "error-notification"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Daily 9am)": {
+      "main": [
+        [
+          {
+            "node": "Read URLs from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read URLs from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Prepare URLs Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare URLs Array": {
+      "main": [
+        [
+          {
+            "node": "Start Batch Scraping Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Batch Scraping Job": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Check Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Job Status": {
+      "main": [
+        [
+          {
+            "node": "Job Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Completed?": {
+      "main": [
+        [
+          {
+            "node": "Extract Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Results": {
+      "main": [
+        [
+          {
+            "node": "Split Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Results": {
+      "main": [
+        [
+          {
+            "node": "Format for Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Write to Results Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Results Sheet": {
+      "main": [
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}
