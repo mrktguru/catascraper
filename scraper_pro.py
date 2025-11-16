@@ -386,9 +386,12 @@ class CatawikiScraperPro:
         best_match = None
         max_parts = 0  # Track how many time parts we found (days, hours, minutes)
 
+        print(f"[DEBUG] Searching for countdown...")
+
         for selector in countdown_selectors:
             try:
                 elements = await page.query_selector_all(selector)
+                print(f"[DEBUG] Selector '{selector}' found {len(elements)} elements")
                 for element in elements:
                     text = await element.inner_text()
                     text_lower = text.lower()
@@ -400,24 +403,31 @@ class CatawikiScraperPro:
                         'min' in text_lower or 'мин' in text_lower
                     ])
 
+                    if parts_count > 0:
+                        print(f"[DEBUG] Found {parts_count} parts in: {text[:100]}")
+
                     # Prefer elements with more time parts (e.g., "1 day 23 hours 22 min")
                     if parts_count > max_parts and len(text.strip()) < 200:
                         max_parts = parts_count
                         best_match = text.strip()
+                        print(f"[DEBUG] New best match ({max_parts} parts): {best_match[:100]}")
 
                     # If we have all 3 parts, that's the best we can get
                     if parts_count >= 3:
+                        print(f"[DEBUG] Found complete countdown (3 parts): {text.strip()[:100]}")
                         return text.strip()
 
                     # Check datetime attribute
                     datetime_attr = await element.get_attribute('datetime')
                     if datetime_attr and not best_match:
                         best_match = datetime_attr
-            except:
+            except Exception as e:
+                print(f"[DEBUG] Error with selector '{selector}': {e}")
                 continue
 
         # If we found something, return it
         if best_match:
+            print(f"[DEBUG] Returning best match: {best_match[:100]}")
             return best_match
 
         # Fallback: improved regex patterns for complete countdown
