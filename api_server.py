@@ -291,7 +291,7 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
                     if end_date and len(end_date) == 19:  # Format: "2025-11-17 21:00:00"
                         date_part = end_date[:10]  # "2025-11-17"
                         time_part = end_date[11:]  # "21:00:00"
-                        result['end_date'] = f'=TEXT(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW(), "[d]d [h]h [m]m")'
+                        result['end_date'] = f'=DAYS(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}"); NOW()) & "d " & HOUR(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW()) & "h " & MINUTE(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW()) & "m"'
 
                     results.append(result)
 
@@ -386,7 +386,7 @@ def save_to_csv(data_list: list, filename: str):
             if end_date and not end_date.startswith('=') and len(end_date) == 19:
                 date_part = end_date[:10]
                 time_part = end_date[11:]
-                end_date = f'=TEXT(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW(), "[d]d [h]h [m]m")'
+                end_date = f'=DAYS(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}"); NOW()) & "d " & HOUR(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW()) & "h " & MINUTE(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW()) & "m"'
 
             # Prepare row data
             row = {
