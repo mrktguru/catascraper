@@ -150,7 +150,12 @@
             "images_count": "={{ $json.images_count }}",
             "first_image": "={{ $json.first_image }}",
             "url": "={{ $json.url }}",
-            "scraped_at": "={{ $json.scraped_at }}"
+            "scraped_at": "={{ $json.scraped_at }}",
+            "producer_rating": "={{ $json.producer_rating }}",
+            "vintage_rating": "={{ $json.vintage_rating }}",
+            "region_rating": "={{ $json.region_rating }}",
+            "overall_appeal": "={{ $json.overall_appeal }}",
+            "investment_potential": "={{ $json.investment_potential }}"
           }
         },
         "options": {
