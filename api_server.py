@@ -13,11 +13,12 @@ from datetime import datetime
 from pathlib import Path
 import uuid
 
-# Import our scraper
+# Import our scrapers
 import sys
 import csv
 sys.path.append('/root/cataparser')
 from scraper_pro import CatawikiScraperPro
+from category_scraper import CatawikiCategoryScraper
 
 app = FastAPI(
     title="Catawiki Scraper API",
@@ -48,6 +49,12 @@ class BatchScrapeRequest(BaseModel):
     headless: bool = True
     save_csv: bool = True
 
+class CategoryScrapeRequest(BaseModel):
+    category_url: HttpUrl
+    max_pages: Optional[int] = None
+    headless: bool = True
+    save_csv: bool = True
+
 # Response models
 class ScrapeResponse(BaseModel):
     success: bool
@@ -75,6 +82,7 @@ async def root():
             "scrape": "/scrape",
             "scrape_async": "/scrape-async",
             "batch": "/scrape-batch",
+            "category": "/scrape-category",
             "job_status": "/job/{job_id}",
             "health": "/health"
         }
@@ -184,6 +192,47 @@ async def scrape_batch(request: BatchScrapeRequest, background_tasks: Background
         data={
             "message": "Batch job started",
             "total_urls": len(request.urls),
+            "check_status_at": f"/job/{job_id}"
+        }
+    )
+
+
+@app.post("/scrape-category", response_model=ScrapeResponse)
+async def scrape_category(request: CategoryScrapeRequest, background_tasks: BackgroundTasks):
+    """
+    Scrape entire Catawiki category with pagination (asynchronous)
+
+    Returns job_id. Check status with /job/{job_id}
+    """
+    job_id = str(uuid.uuid4())
+
+    jobs[job_id] = {
+        "job_id": job_id,
+        "status": "pending",
+        "result": None,
+        "error": None,
+        "created_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "category_url": str(request.category_url),
+        "max_pages": request.max_pages
+    }
+
+    background_tasks.add_task(
+        run_category_scrape_job,
+        job_id,
+        str(request.category_url),
+        request.max_pages,
+        request.headless,
+        request.save_csv
+    )
+
+    return ScrapeResponse(
+        success=True,
+        job_id=job_id,
+        data={
+            "message": "Category scraping job started",
+            "category_url": str(request.category_url),
+            "max_pages": request.max_pages or "ALL",
             "check_status_at": f"/job/{job_id}"
         }
     )
@@ -337,6 +386,81 @@ async def run_batch_scrape_job(job_id: str, urls: List[str], headless: bool, sav
         else:
             jobs[job_id]["status"] = "failed"
             jobs[job_id]["error"] = "No successful scrapes"
+
+    except Exception as e:
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["error"] = str(e)
+
+    finally:
+        jobs[job_id]["completed_at"] = datetime.now().isoformat()
+
+
+async def run_category_scrape_job(job_id: str, category_url: str, max_pages: Optional[int], headless: bool, save_csv: bool):
+    """Run category scraping job in background"""
+    try:
+        jobs[job_id]["status"] = "running"
+
+        # Create category scraper
+        scraper = CatawikiCategoryScraper(headless=headless)
+
+        # Scrape the category
+        results = await scraper.scrape_category(category_url, max_pages=max_pages)
+
+        # Format results with Google Sheets formulas
+        formatted_results = []
+        for result in results:
+            # Add first_image as Google Sheets formula for 100x100px preview
+            images = result.get('images', [])
+            if images:
+                result['first_image'] = f'=IMAGE("{images[0]}"; 4; 100; 100)'
+            else:
+                result['first_image'] = ''
+
+            # Format URL as clickable icon with HYPERLINK formula
+            url = result.get('url', '')
+            if url:
+                result['url'] = f'=HYPERLINK("{url}"; "🔗 View")'
+
+            # Format end_date as live countdown formula
+            end_date = result.get('end_date', '')
+            if end_date and len(end_date) == 19:  # Format: "2025-11-17 21:00:00"
+                date_part = end_date[:10]  # "2025-11-17"
+                time_part = end_date[11:]  # "21:00:00"
+                result['end_date'] = f'=DAYS(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}"); NOW()) & "d " & HOUR(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW()) & "h " & MINUTE(DATEVALUE("{date_part}") + TIMEVALUE("{time_part}") - NOW()) & "m"'
+
+            formatted_results.append(result)
+
+        # Save results
+        if formatted_results:
+            # Save JSON
+            output_dir = Path("/root/cataparser/output")
+            output_dir.mkdir(exist_ok=True)
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            json_path = output_dir / f"category_{job_id}_{timestamp}.json"
+
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(formatted_results, f, indent=2, ensure_ascii=False)
+
+            # Save CSV if requested
+            if save_csv:
+                csv_path = output_dir / f"category_{job_id}_{timestamp}.csv"
+                save_to_csv(formatted_results, str(csv_path))
+
+            jobs[job_id]["status"] = "completed"
+            jobs[job_id]["result"] = {
+                "category_url": category_url,
+                "max_pages": max_pages,
+                "total_lots": len(formatted_results),
+                "results": formatted_results,
+                "output_files": {
+                    "json": str(json_path),
+                    "csv": str(csv_path) if save_csv else None
+                }
+            }
+        else:
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["error"] = "No lots scraped from category"
 
     except Exception as e:
         jobs[job_id]["status"] = "failed"
