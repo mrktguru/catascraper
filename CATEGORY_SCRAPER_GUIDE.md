@@ -85,7 +85,11 @@ Leave the rest empty - the workflow will populate it.
 1. Click on the node
 2. **Document**: Select your spreadsheet
 3. **Sheet**: Enter `URL-CAT` (exact name)
-4. **Range**: `A:A`
+4. **Filters** (расширьте секцию):
+   - Click **Add Filter**
+   - **Column**: `category url`
+   - **Value**: `=*catawiki*` (finds all rows containing "catawiki")
+5. **Options**: Leave default
 
 #### Node: "Write to CATALOG Sheet"
 
@@ -328,12 +332,45 @@ curl http://172.17.0.1:8000/job/YOUR_JOB_ID
 
 ## 🐛 Troubleshooting
 
-### Problem: "No valid category URL found"
+### Problem: "No valid category URL found in URL-CAT sheet"
 
 **Solution:**
-- Check URL-CAT sheet has header "category_url" in A1
-- Check URL starts with "http" or "https"
-- Ensure URL is in cell A2 (first data row)
+
+1. **Check Filter setting in "Read Category URLs" node:**
+   - Open the node
+   - Expand **Filters** section
+   - Should have filter:
+     - **Column**: `category url`
+     - **Value**: `=*catawiki*`
+   - This automatically finds rows with catawiki URLs
+
+2. **Check Google Sheets structure:**
+   - Cell A1: Header `category url` (exact name, case-sensitive)
+   - Cell A2: Your Catawiki URL
+   - Example:
+     ```
+     | category url                                                |
+     | https://www.catawiki.com/en/s?q=burgundy&filters=...       |
+     ```
+
+3. **Check URL format:**
+   - URL must start with `http://` or `https://`
+   - URL must contain word `catawiki`
+   - Remove any spaces before/after URL
+   - Example: `https://www.catawiki.com/en/s?q=burgundy&filters=bidding_end_days%255B%255D%3D20251125`
+
+4. **Debug in n8n:**
+   - Execute workflow manually
+   - Click on "Read Category URLs" node
+   - Check output - should see your URL with field name "category url"
+   - Click on "Prepare Category URL" node
+   - Check logs in browser console (F12)
+   - Should see: `✓ Category URL: https://...`
+
+5. **If filter doesn't work:**
+   - Check exact column name in Google Sheets (case-sensitive!)
+   - Try changing filter value to just `*` (match all)
+   - Or remove filter and use Options → Range: `A2:A` instead
 
 ### Problem: Job stuck in "running" status
 

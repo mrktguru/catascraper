@@ -31,8 +31,16 @@
           "value": "URL-CAT",
           "mode": "name"
         },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "category url",
+              "lookupValue": "=*catawiki*"
+            }
+          ]
+        },
         "options": {
-          "range": "A:A"
+          "useQueryString": false
         }
       },
       "name": "Read Category URLs",
@@ -44,7 +52,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Extract category URL from Google Sheets\nconst items = $input.all();\n\n// Get first non-empty URL from column A\nfor (const item of items) {\n  const json = item.json;\n  const url = json.category_url || json.A || Object.values(json)[0];\n  \n  if (url && String(url).trim().startsWith('http')) {\n    console.log('Found category URL:', url);\n    return { json: { category_url: String(url).trim() } };\n  }\n}\n\nthrow new Error('No valid category URL found in URL-CAT sheet');"
+        "jsCode": "// Extract category URL from Google Sheets (filtered data)\nconst items = $input.all();\n\nconsole.log('Total items received:', items.length);\n\nif (items.length === 0) {\n  throw new Error('No data received from Google Sheets. Check if URL-CAT sheet has data.');\n}\n\n// Get first item (already filtered by Google Sheets)\nconst firstItem = items[0].json;\n\n// Try to get URL from different possible field names\nconst categoryUrl = firstItem['category url'] || firstItem.category_url || firstItem.url || firstItem.A;\n\nif (!categoryUrl) {\n  console.error('Available fields:', Object.keys(firstItem));\n  throw new Error('Category URL field not found. Available fields: ' + Object.keys(firstItem).join(', '));\n}\n\nconst urlStr = String(categoryUrl).trim();\n\nconsole.log('✓ Category URL:', urlStr);\n\nif (!urlStr.startsWith('http')) {\n  throw new Error('Invalid URL format. URL must start with http:// or https://');\n}\n\nreturn { json: { category_url: urlStr } };"
       },
       "name": "Prepare Category URL",
       "type": "n8n-nodes-base.code",
