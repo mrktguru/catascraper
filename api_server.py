@@ -5,8 +5,8 @@ FastAPI server for Catawiki scraper - n8n integration
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl
-from typing import Optional, List
+from pydantic import BaseModel, HttpUrl, field_validator
+from typing import Optional, List, Union
 import asyncio
 import json
 from datetime import datetime
@@ -51,9 +51,32 @@ class BatchScrapeRequest(BaseModel):
 
 class CategoryScrapeRequest(BaseModel):
     category_url: HttpUrl
-    max_pages: Optional[int] = None
-    headless: bool = True
-    save_csv: bool = True
+    max_pages: Optional[Union[int, str]] = None
+    headless: Union[bool, str] = True
+    save_csv: Union[bool, str] = True
+
+    @field_validator('max_pages', mode='before')
+    @classmethod
+    def parse_max_pages(cls, v):
+        """Convert string 'null' or empty to None, otherwise parse as int"""
+        if v is None or v == '' or v == 'null' or v == 'None':
+            return None
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return None
+        return v
+
+    @field_validator('headless', 'save_csv', mode='before')
+    @classmethod
+    def parse_bool(cls, v):
+        """Convert string 'true'/'false' to boolean"""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() in ('true', '1', 'yes', 'on')
+        return bool(v)
 
 # Response models
 class ScrapeResponse(BaseModel):
