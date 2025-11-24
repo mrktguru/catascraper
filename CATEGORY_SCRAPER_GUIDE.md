@@ -85,7 +85,7 @@ Leave the rest empty - the workflow will populate it.
 1. Click on the node
 2. **Document**: Select your spreadsheet
 3. **Sheet**: Enter `URL-CAT` (exact name)
-4. **Range**: `A:A`
+4. **Options** → **Range**: `A2:A` (skips header row)
 
 #### Node: "Write to CATALOG Sheet"
 
@@ -328,12 +328,31 @@ curl http://172.17.0.1:8000/job/YOUR_JOB_ID
 
 ## 🐛 Troubleshooting
 
-### Problem: "No valid category URL found"
+### Problem: "No valid category URL found in URL-CAT sheet"
 
 **Solution:**
-- Check URL-CAT sheet has header "category_url" in A1
-- Check URL starts with "http" or "https"
-- Ensure URL is in cell A2 (first data row)
+
+1. **Check Range setting in "Read Category URLs" node:**
+   - Open the node
+   - Go to **Options** → **Range**
+   - Should be `A2:A` (not `A:A` or `A1:A`)
+   - This skips the header row
+
+2. **Check URL format:**
+   - URL must start with `http://` or `https://`
+   - Example: `https://www.catawiki.com/en/s?q=burgundy&filters=...`
+   - Remove any spaces before/after URL
+
+3. **Check cell location:**
+   - URL should be in cell **A2** (first data row)
+   - Cell A1 should be header: `category_url` (optional)
+
+4. **Debug in n8n:**
+   - Execute workflow manually
+   - Click on "Read Category URLs" node
+   - Check output - should see your URL
+   - Click on "Prepare Category URL" node
+   - Check logs in browser console (F12)
 
 ### Problem: Job stuck in "running" status
 

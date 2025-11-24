@@ -32,7 +32,7 @@
           "mode": "name"
         },
         "options": {
-          "range": "A:A"
+          "range": "A2:A"
         }
       },
       "name": "Read Category URLs",
@@ -44,7 +44,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Extract category URL from Google Sheets\nconst items = $input.all();\n\n// Get first non-empty URL from column A\nfor (const item of items) {\n  const json = item.json;\n  const url = json.category_url || json.A || Object.values(json)[0];\n  \n  if (url && String(url).trim().startsWith('http')) {\n    console.log('Found category URL:', url);\n    return { json: { category_url: String(url).trim() } };\n  }\n}\n\nthrow new Error('No valid category URL found in URL-CAT sheet');"
+        "jsCode": "// Extract category URL from Google Sheets\nconst items = $input.all();\n\nconsole.log('Total items received:', items.length);\n\n// Get first non-empty URL from column A, skipping headers\nfor (const item of items) {\n  const json = item.json;\n  \n  // Try different possible field names\n  const url = json.category_url || json.A || json.url || Object.values(json)[0];\n  const urlStr = String(url || '').trim();\n  \n  console.log('Checking value:', urlStr);\n  \n  // Skip headers and empty values\n  if (urlStr && \n      urlStr.toLowerCase() !== 'category_url' && \n      urlStr.toLowerCase() !== 'url' &&\n      urlStr.startsWith('http')) {\n    console.log('✓ Found category URL:', urlStr);\n    return { json: { category_url: urlStr } };\n  }\n}\n\nconsole.error('No valid URL found. Items:', JSON.stringify(items));\nthrow new Error('No valid category URL found in URL-CAT sheet');"
       },
       "name": "Prepare Category URL",
       "type": "n8n-nodes-base.code",
