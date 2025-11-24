@@ -20,26 +20,66 @@ class CatawikiCategoryScraper:
         lot_urls = []
 
         try:
-            # Найти все карточки лотов
-            lot_cards = await page.query_selector_all('[data-testid^="lot-card-container-"]')
-            print(f"[{time.strftime('%H:%M:%S')}] Найдено {len(lot_cards)} карточек лотов")
+            # Попробуем несколько вариантов селекторов
+            selectors = [
+                '[data-testid^="lot-card-container-"]',
+                'article.c-lot-card__container',
+                'a.c-lot-card[href*="/en/l/"]',
+                '[data-sentry-component="ListingLotsWrapper"] a[href*="/en/l/"]'
+            ]
 
-            for card in lot_cards:
-                # Найти ссылку внутри карточки
-                link = await card.query_selector('a[href*="/en/l/"]')
-                if link:
+            lot_cards = []
+            for selector in selectors:
+                lot_cards = await page.query_selector_all(selector)
+                print(f"[{time.strftime('%H:%M:%S')}] Селектор '{selector}': найдено {len(lot_cards)} элементов")
+                if lot_cards:
+                    break
+
+            if not lot_cards:
+                print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Не найдено карточек ни одним селектором")
+                # Попробуем найти любые ссылки на лоты
+                all_links = await page.query_selector_all('a[href*="/en/l/"]')
+                print(f"[{time.strftime('%H:%M:%S')}] Всего ссылок на /en/l/: {len(all_links)}")
+
+                for link in all_links:
                     href = await link.get_attribute('href')
-                    if href:
-                        # Полный URL
+                    if href and '/en/l/' in href:
                         if href.startswith('http'):
-                            lot_url = href.split('?')[0]  # Убрать query параметры
+                            lot_url = href.split('?')[0]
                         else:
                             lot_url = f"https://www.catawiki.com{href.split('?')[0]}"
+                        if lot_url not in lot_urls:
+                            lot_urls.append(lot_url)
 
-                        lot_urls.append(lot_url)
+                return lot_urls
+
+            # Если нашли карточки, извлекаем URL
+            for card in lot_cards:
+                # Попробуем найти ссылку
+                if await card.get_attribute('href'):
+                    # Это сама ссылка
+                    href = await card.get_attribute('href')
+                else:
+                    # Ищем ссылку внутри
+                    link = await card.query_selector('a[href*="/en/l/"]')
+                    if link:
+                        href = await link.get_attribute('href')
+                    else:
+                        continue
+
+                if href:
+                    # Полный URL
+                    if href.startswith('http'):
+                        lot_url = href.split('?')[0]  # Убрать query параметры
+                    else:
+                        lot_url = f"https://www.catawiki.com{href.split('?')[0]}"
+
+                    lot_urls.append(lot_url)
 
         except Exception as e:
             print(f"[{time.strftime('%H:%M:%S')}] ❌ Ошибка извлечения URL: {e}")
+            import traceback
+            traceback.print_exc()
 
         return lot_urls
 
@@ -114,8 +154,12 @@ class CatawikiCategoryScraper:
 
                 # Загрузить первую страницу категории
                 print(f"[{time.strftime('%H:%M:%S')}] 🌐 Загрузка категории...")
-                await page.goto(category_url, wait_until='domcontentloaded', timeout=30000)
-                await asyncio.sleep(3)  # Дать время на загрузку контента
+                await page.goto(category_url, wait_until='networkidle', timeout=60000)
+                await asyncio.sleep(5)  # Дать время на загрузку контента
+
+                # Отладка: сохранить HTML для проверки
+                html_content = await page.content()
+                print(f"[{time.strftime('%H:%M:%S')}] 📄 HTML размер: {len(html_content)} символов")
 
                 # Определить общее количество страниц
                 total_pages = await self.get_total_pages(page)
