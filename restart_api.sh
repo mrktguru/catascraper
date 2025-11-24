@@ -29,15 +29,42 @@ echo ""
 echo "Checking dependencies..."
 python3 -c "import fastapi, uvicorn" 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "❌ Dependencies not installed"
+    echo "❌ API dependencies not installed"
     echo "Run: pip3 install -r requirements_api.txt"
     exit 1
 fi
-echo "✓ Dependencies OK"
+echo "✓ API dependencies OK"
+
+# Check Playwright browsers
+python3 -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); p.chromium.executable_path; p.stop()" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "⚠️  Playwright browser not installed"
+    echo ""
+    echo "API will start, but scraping will fail until you run:"
+    echo "  python3 -m playwright install chromium"
+    echo ""
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+else
+    echo "✓ Playwright browser OK"
+fi
 echo ""
 
-# Start server
-cd /home/user/catascraper
+# Determine working directory (try production path first, fallback to dev)
+if [ -d "/root/cataparser" ]; then
+    cd /root/cataparser
+elif [ -d "/home/user/catascraper" ]; then
+    cd /home/user/catascraper
+else
+    echo "❌ Cannot find project directory"
+    exit 1
+fi
+
+echo "Working directory: $(pwd)"
+echo ""
 
 echo "Starting API server on http://0.0.0.0:8000"
 echo ""
