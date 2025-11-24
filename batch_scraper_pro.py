@@ -125,6 +125,11 @@ def save_to_csv(data_list: list, filename: str):
         'first_image',
         'url',
         'scraped_at',
+        'producer_rating',
+        'vintage_rating',
+        'region_rating',
+        'overall_appeal',
+        'investment_potential',
     ]
 
     with open(filename, 'w', newline='', encoding='utf-8-sig') as csvfile:
@@ -162,6 +167,11 @@ def save_to_csv(data_list: list, filename: str):
                 'first_image': first_image_formula,
                 'url': url,
                 'scraped_at': item.get('scraped_at', ''),
+                'producer_rating': item.get('producer_rating', ''),
+                'vintage_rating': item.get('vintage_rating', ''),
+                'region_rating': item.get('region_rating', ''),
+                'overall_appeal': item.get('overall_appeal', ''),
+                'investment_potential': item.get('investment_potential', ''),
             }
 
             writer.writerow(row)

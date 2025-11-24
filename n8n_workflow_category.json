@@ -1,5 +1,5 @@
 {
-  "name": "Catawiki: Google Sheets Complete (Fixed IF)",
+  "name": "Catawiki: Category Scraper (URL-CAT → CATALOG)",
   "nodes": [
     {
       "parameters": {
@@ -7,7 +7,7 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 9 * * *"
+              "expression": "0 10 * * *"
             }
           ]
         }
@@ -28,14 +28,14 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "gid=0",
-          "mode": "id"
+          "value": "URL-CAT",
+          "mode": "name"
         },
         "options": {
           "range": "A:A"
         }
       },
-      "name": "Read URLs",
+      "name": "Read Category URLs",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.1,
       "position": [450, 400],
@@ -44,9 +44,9 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Извлекаем URL из Google Sheets\nconst urls = $input.all()\n  .map(item => {\n    const json = item.json;\n    return json.url || json.A || Object.values(json)[0];\n  })\n  .filter(url => url && String(url).trim().startsWith('http'));\n\nconsole.log('Found URLs:', urls.length);\n\nreturn { json: { urls: urls } };"
+        "jsCode": "// Extract category URL from Google Sheets\nconst items = $input.all();\n\n// Get first non-empty URL from column A\nfor (const item of items) {\n  const json = item.json;\n  const url = json.category_url || json.A || Object.values(json)[0];\n  \n  if (url && String(url).trim().startsWith('http')) {\n    console.log('Found category URL:', url);\n    return { json: { category_url: String(url).trim() } };\n  }\n}\n\nthrow new Error('No valid category URL found in URL-CAT sheet');"
       },
-      "name": "Prepare URLs",
+      "name": "Prepare Category URL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [650, 400],
@@ -55,13 +55,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://172.17.0.1:8000/scrape-batch",
+        "url": "http://172.17.0.1:8000/scrape-category",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
             {
-              "name": "urls",
-              "value": "={{ $json.urls }}"
+              "name": "category_url",
+              "value": "={{ $json.category_url }}"
+            },
+            {
+              "name": "max_pages",
+              "value": "=null"
             },
             {
               "name": "headless",
@@ -75,7 +79,7 @@
         },
         "options": {}
       },
-      "name": "Start Batch Job",
+      "name": "Start Category Scraping Job",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [850, 400],
@@ -83,14 +87,15 @@
     },
     {
       "parameters": {
-        "amount": 2,
+        "amount": 5,
         "unit": "minutes"
       },
-      "name": "Wait 2 Minutes",
+      "name": "Wait 5 Minutes",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
       "position": [1050, 400],
-      "id": "5"
+      "id": "5",
+      "notes": "Category scraping takes longer than batch scraping"
     },
     {
       "parameters": {
@@ -106,7 +111,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Проверяем статус задачи\nconst data = $input.first().json;\nconst status = data.status;\n\nconsole.log('Job status:', status);\n\nif (status === 'completed') {\n  // Успешно - возвращаем данные в первый output\n  return [[$input.first()]];\n} else {\n  // Ошибка - возвращаем во второй output\n  return [null, [$input.first()]];\n}"
+        "jsCode": "// Check if job is completed\nconst data = $input.first().json;\nconst status = data.status;\n\nconsole.log('Job status:', status);\n\nif (status === 'completed') {\n  // Success - return data in first output\n  return [[$input.first()]];\n} else if (status === 'running') {\n  // Still running - return in third output for retry\n  return [null, null, [$input.first()]];\n} else {\n  // Error - return in second output\n  return [null, [$input.first()]];\n}"
       },
       "name": "Check If Completed",
       "type": "n8n-nodes-base.code",
@@ -117,7 +122,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Извлекаем и форматируем результаты\nconst results = $input.first().json.result.results || [];\n\nconsole.log('Processing results:', results.length);\n\n// Форматируем для Google Sheets\nreturn results.map(item => ({\n  json: {\n    title: item.title || '',\n    bottles_count: item.bottles_count || '',\n    seller_name: item.seller_name || '',\n    current_price: item.current_price || '',\n    shipping_cost: item.shipping_cost || '',\n    end_date: item.end_date || '',\n    images_count: (item.images || []).length,\n    first_image: item.first_image || '',\n    url: item.url || '',\n    scraped_at: item.scraped_at || ''\n  }\n}));"
+        "jsCode": "// Extract and format results for CATALOG sheet\nconst results = $input.first().json.result.results || [];\n\nconsole.log('Processing results:', results.length);\n\n// Format for Google Sheets\nreturn results.map(item => ({\n  json: {\n    title: item.title || '',\n    bottles_count: item.bottles_count || '',\n    seller_name: item.seller_name || '',\n    current_price: item.current_price || '',\n    shipping_cost: item.shipping_cost || '',\n    end_date: item.end_date || '',\n    images_count: (item.images || []).length,\n    first_image: item.first_image || '',\n    url: item.url || '',\n    scraped_at: item.scraped_at || '',\n    producer_rating: item.producer_rating || '',\n    vintage_rating: item.vintage_rating || '',\n    region_rating: item.region_rating || '',\n    overall_appeal: item.overall_appeal || '',\n    investment_potential: item.investment_potential || ''\n  }\n}));"
       },
       "name": "Format Results",
       "type": "n8n-nodes-base.code",
@@ -135,8 +140,8 @@
         },
         "sheetName": {
           "__rl": true,
-          "value": "gid=1",
-          "mode": "id"
+          "value": "CATALOG",
+          "mode": "name"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -163,7 +168,7 @@
           "useAppend": true
         }
       },
-      "name": "Write to Google Sheets",
+      "name": "Write to CATALOG Sheet",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.1,
       "position": [1850, 300],
@@ -179,6 +184,18 @@
       "typeVersion": 2,
       "position": [1650, 500],
       "id": "10"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "name": "Wait 2 More Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1450, 600],
+      "id": "11",
+      "notes": "Retry if still running"
     }
   ],
   "connections": {
@@ -186,47 +203,47 @@
       "main": [
         [
           {
-            "node": "Read URLs",
+            "node": "Read Category URLs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read URLs": {
+    "Read Category URLs": {
       "main": [
         [
           {
-            "node": "Prepare URLs",
+            "node": "Prepare Category URL",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare URLs": {
+    "Prepare Category URL": {
       "main": [
         [
           {
-            "node": "Start Batch Job",
+            "node": "Start Category Scraping Job",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Start Batch Job": {
+    "Start Category Scraping Job": {
       "main": [
         [
           {
-            "node": "Wait 2 Minutes",
+            "node": "Wait 5 Minutes",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait 2 Minutes": {
+    "Wait 5 Minutes": {
       "main": [
         [
           {
@@ -263,6 +280,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Wait 2 More Minutes",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -270,7 +294,18 @@
       "main": [
         [
           {
-            "node": "Write to Google Sheets",
+            "node": "Write to CATALOG Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 More Minutes": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
             "type": "main",
             "index": 0
           }
