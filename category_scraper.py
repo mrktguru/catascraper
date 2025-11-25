@@ -12,6 +12,7 @@ from scraper_pro import CatawikiScraperPro
 
 class CatawikiCategoryScraper:
     def __init__(self, headless: bool = True):
+        print(f"[DEBUG] CatawikiCategoryScraper.__init__ received headless={headless!r}, type={type(headless)}")
         self.headless = headless
         self.scraper = CatawikiScraperPro(headless=headless)
 
