@@ -140,22 +140,60 @@ class CatawikiCategoryScraper:
 
         async with async_playwright() as p:
             try:
-                # Запустить браузер
+                # Запустить браузер с анти-детекцией
                 browser = await p.chromium.launch(
                     headless=self.headless,
                     args=[
                         '--disable-blink-features=AutomationControlled',
                         '--disable-dev-shm-usage',
                         '--no-sandbox',
-                    ]
+                        '--disable-setuid-sandbox',
+                        '--disable-web-security',
+                        '--disable-features=IsolateOrigins,site-per-process',
+                        '--disable-gpu',
+                        '--single-process',
+                    ],
+                    timeout=30000
                 )
 
-                page = await browser.new_page()
+                # Create context with stealth settings
+                context = await browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    locale='en-US',
+                    timezone_id='Europe/Amsterdam',
+                    extra_http_headers={
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                    }
+                )
+
+                # Add stealth script to hide automation
+                await context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});
+                    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+                    window.chrome = {runtime: {}};
+                """)
+
+                page = await context.new_page()
 
                 # Загрузить первую страницу категории
                 print(f"[{time.strftime('%H:%M:%S')}] 🌐 Загрузка категории...")
-                await page.goto(category_url, wait_until='networkidle', timeout=60000)
-                await asyncio.sleep(5)  # Дать время на загрузку контента
+                response = await page.goto(category_url, wait_until='domcontentloaded', timeout=30000)
+
+                # Проверка на блокировку
+                if response and response.status == 403:
+                    print(f"[{time.strftime('%H:%M:%S')}] ❌ Catawiki заблокировал доступ (403)")
+                    await browser.close()
+                    return []
+
+                print(f"[{time.strftime('%H:%M:%S')}] ✓ Страница загружена (статус: {response.status if response else 'unknown'})")
+
+                await asyncio.sleep(3)  # Дать время на загрузку контента
 
                 # Отладка: сохранить HTML для проверки
                 html_content = await page.content()
