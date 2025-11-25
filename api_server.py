@@ -52,8 +52,8 @@ class BatchScrapeRequest(BaseModel):
 class CategoryScrapeRequest(BaseModel):
     category_url: HttpUrl
     max_pages: Optional[Union[int, str]] = None
-    headless: Union[bool, str] = True
-    save_csv: Union[bool, str] = True
+    headless: bool = True
+    save_csv: bool = True
 
     @field_validator('max_pages', mode='before')
     @classmethod

@@ -1,0 +1,267 @@
+{
+  "name": "Catawiki: Category Scraper → Google Sheets (FIXED)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 400],
+      "id": "1",
+      "notes": "Runs daily at 10:00 AM. Change cron expression as needed."
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "URL-CAT",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "category url",
+              "lookupValue": "=*catawiki*"
+            }
+          ]
+        },
+        "options": {
+          "useQueryString": false
+        }
+      },
+      "name": "Read Category URLs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.1,
+      "position": [450, 400],
+      "id": "2",
+      "notes": "Replace YOUR_SPREADSHEET_ID with your actual Google Sheets ID"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract category URL from Google Sheets\nconst items = $input.all();\n\nconsole.log('📊 Total items from sheet:', items.length);\n\nif (items.length === 0) {\n  throw new Error('❌ No data in URL-CAT sheet. Add category URLs first.');\n}\n\n// Get first item\nconst firstItem = items[0].json;\n\n// Try multiple field name variations\nconst categoryUrl = firstItem['category url'] || \n                   firstItem.category_url || \n                   firstItem.url || \n                   firstItem.A;\n\nif (!categoryUrl) {\n  console.error('Available fields:', Object.keys(firstItem));\n  throw new Error('❌ Column \"category url\" not found in sheet');\n}\n\nconst urlStr = String(categoryUrl).trim();\n\nconsole.log('✅ Category URL:', urlStr);\n\nif (!urlStr.startsWith('http')) {\n  throw new Error('❌ Invalid URL format. Must start with http:// or https://');\n}\n\n// Optional: Extract max_pages from sheet (column \"max pages\")\nconst maxPages = firstItem['max pages'] || firstItem.max_pages || null;\n\nreturn { \n  json: { \n    category_url: urlStr,\n    max_pages: maxPages ? parseInt(maxPages) : null\n  } \n};"
+      },
+      "name": "Prepare Category URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "id": "3",
+      "notes": "Extracts URL from sheet. Optionally reads 'max pages' column."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:8000/scrape-category",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ JSON.stringify({\n  category_url: $json.category_url,\n  max_pages: $json.max_pages,\n  headless: true,\n  save_csv: true\n}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Start Scraping Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 400],
+      "id": "4",
+      "notes": "Sends POST request to API. Returns job_id immediately."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Log job start\nconst response = $input.first().json;\n\nif (!response.success) {\n  throw new Error('❌ Failed to start job: ' + (response.error || 'Unknown error'));\n}\n\nconst jobId = response.job_id;\nconsole.log('✅ Job started! ID:', jobId);\nconsole.log('📊 Category:', response.data.category_url);\nconsole.log('📄 Max pages:', response.data.max_pages || 'ALL');\n\nreturn [{\n  json: {\n    job_id: jobId,\n    category_url: response.data.category_url,\n    started_at: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Log Job Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "id": "5"
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "name": "Wait 1 Minute",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "id": "6",
+      "notes": "Initial wait. Category scraping takes 2-10 minutes depending on pages."
+    },
+    {
+      "parameters": {
+        "url": "=http://172.17.0.1:8000/job/{{ $json.job_id }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "name": "Check Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1450, 400],
+      "id": "7",
+      "notes": "Polls job status. Returns: pending/running/completed/failed"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Check job status and route accordingly\nconst data = $input.first().json;\nconst status = data.status;\nconst jobId = data.job_id;\n\nconsole.log('🔍 Job', jobId, 'status:', status);\n\nif (status === 'completed') {\n  console.log('✅ Job completed successfully!');\n  console.log('📊 Total lots scraped:', data.result?.total_lots || 0);\n  // Output 1: Success\n  return [[$input.first()], null, null];\n  \n} else if (status === 'running' || status === 'pending') {\n  console.log('⏳ Job still running, will retry...');\n  // Output 3: Retry\n  return [null, null, [$input.first()]];\n  \n} else if (status === 'failed') {\n  console.error('❌ Job failed!');\n  console.error('Error:', data.error);\n  // Output 2: Error\n  return [null, [$input.first()], null];\n  \n} else {\n  console.error('⚠️ Unknown status:', status);\n  return [null, [$input.first()], null];\n}"
+      },
+      "name": "Route By Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 400],
+      "id": "8",
+      "notes": "Output 1: Success → Output 2: Failed → Output 3: Retry"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract and format results for Google Sheets\nconst data = $input.first().json;\nconst results = data.result?.results || [];\n\nif (results.length === 0) {\n  throw new Error('❌ No results in completed job. Check API logs.');\n}\n\nconsole.log('📊 Processing', results.length, 'wine lots');\n\n// Format each wine lot for CATALOG sheet\nreturn results.map((item, index) => {\n  console.log(`  ${index + 1}. ${item.title?.substring(0, 50)}...`);\n  \n  return {\n    json: {\n      title: item.title || '',\n      bottles_count: item.bottles_count || '',\n      seller_name: item.seller_name || '',\n      current_price: item.current_price || '',\n      shipping_cost: item.shipping_cost || '',\n      end_date: item.end_date || '',\n      images_count: (item.images || []).length,\n      first_image: item.first_image || '',\n      url: item.url || '',\n      scraped_at: item.scraped_at || new Date().toISOString(),\n      producer_rating: item.producer_rating || '',\n      vintage_rating: item.vintage_rating || '',\n      region_rating: item.region_rating || '',\n      overall_appeal: item.overall_appeal || '',\n      investment_potential: item.investment_potential || ''\n    }\n  };\n});"
+      },
+      "name": "Format for Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 300],
+      "id": "9",
+      "notes": "Converts API results to Google Sheets format with formulas"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "CATALOG",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "bottles_count": "={{ $json.bottles_count }}",
+            "seller_name": "={{ $json.seller_name }}",
+            "current_price": "={{ $json.current_price }}",
+            "shipping_cost": "={{ $json.shipping_cost }}",
+            "end_date": "={{ $json.end_date }}",
+            "images_count": "={{ $json.images_count }}",
+            "first_image": "={{ $json.first_image }}",
+            "url": "={{ $json.url }}",
+            "scraped_at": "={{ $json.scraped_at }}",
+            "producer_rating": "={{ $json.producer_rating }}",
+            "vintage_rating": "={{ $json.vintage_rating }}",
+            "region_rating": "={{ $json.region_rating }}",
+            "overall_appeal": "={{ $json.overall_appeal }}",
+            "investment_potential": "={{ $json.investment_potential }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
+        }
+      },
+      "name": "Write to CATALOG",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.2,
+      "position": [2050, 300],
+      "id": "10",
+      "notes": "Appends wine data to CATALOG sheet. USER_ENTERED keeps formulas."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst jobId = data.job_id;\nconst error = data.error || 'Unknown error';\n\nconsole.error('❌ Job', jobId, 'failed!');\nconsole.error('Error:', error);\n\nreturn [{\n  json: {\n    error: true,\n    job_id: jobId,\n    status: data.status,\n    error_message: error,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Log Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 500],
+      "id": "11",
+      "notes": "Handles failed jobs. You can add email notification here."
+    },
+    {
+      "parameters": {
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "name": "Wait 90 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1850, 600],
+      "id": "12",
+      "notes": "Wait before retry. Category scraping can take 5-10 minutes."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Check retry count to prevent infinite loops\nconst data = $input.first().json;\nconst retryCount = data.retry_count || 0;\n\nif (retryCount >= 5) {\n  console.error('❌ Max retries (5) reached. Job timed out.');\n  throw new Error('Job timed out after 5 retries (~10 minutes)');\n}\n\nconsole.log(`🔄 Retry ${retryCount + 1}/5`);\n\nreturn [{\n  json: {\n    ...data,\n    retry_count: retryCount + 1\n  }\n}];"
+      },
+      "name": "Retry Counter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 600],
+      "id": "13",
+      "notes": "Prevents infinite retry loop. Max 5 retries = ~10 min total."
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{"node": "Read Category URLs", "type": "main", "index": 0}]]
+    },
+    "Read Category URLs": {
+      "main": [[{"node": "Prepare Category URL", "type": "main", "index": 0}]]
+    },
+    "Prepare Category URL": {
+      "main": [[{"node": "Start Scraping Job", "type": "main", "index": 0}]]
+    },
+    "Start Scraping Job": {
+      "main": [[{"node": "Log Job Start", "type": "main", "index": 0}]]
+    },
+    "Log Job Start": {
+      "main": [[{"node": "Wait 1 Minute", "type": "main", "index": 0}]]
+    },
+    "Wait 1 Minute": {
+      "main": [[{"node": "Check Job Status", "type": "main", "index": 0}]]
+    },
+    "Check Job Status": {
+      "main": [[{"node": "Route By Status", "type": "main", "index": 0}]]
+    },
+    "Route By Status": {
+      "main": [
+        [{"node": "Format for Sheets", "type": "main", "index": 0}],
+        [{"node": "Log Error", "type": "main", "index": 0}],
+        [{"node": "Retry Counter", "type": "main", "index": 0}]
+      ]
+    },
+    "Format for Sheets": {
+      "main": [[{"node": "Write to CATALOG", "type": "main", "index": 0}]]
+    },
+    "Retry Counter": {
+      "main": [[{"node": "Wait 90 Seconds", "type": "main", "index": 0}]]
+    },
+    "Wait 90 Seconds": {
+      "main": [[{"node": "Check Job Status", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {}
+}
